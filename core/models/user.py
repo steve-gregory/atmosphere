@@ -202,6 +202,7 @@ def create_new_accounts(username, provider=None):
             logger.exception("Could *NOT* Create NEW account for %s" % user.username)
     return identities
 
+
 def get_available_providers():
     from core.models.provider import Provider
     from core.query import only_current
