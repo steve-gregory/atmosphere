@@ -54,6 +54,15 @@ class AtmosphereUser(AbstractUser):
             all_identities |= group.current_identities.all()
         return all_identities
 
+    @property
+    def current_instances(self):
+        from core.models import Instance
+        from core.query import only_current
+        all_instances = Instance.objects.none()
+        for identity in self.current_identities:
+            all_instances |= identity.instance_set.filter(only_current())
+        return all_instances
+
     def can_use_identity(self, identity_id):
         return self.current_identities.filter(id=identity_id).count() > 0
 

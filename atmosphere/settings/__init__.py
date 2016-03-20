@@ -73,6 +73,7 @@ INSTALLED_APPS = (
     # 3rd party apps
     'rest_framework',
     'django_filters',
+    'channels',
 
     'djcelery',
     'corsheaders',
@@ -341,6 +342,16 @@ PROXY_CALLBACK_URL = SERVER_URL + '/CAS_proxyCallback'
 # Chromogenic
 LOCAL_STORAGE = "/storage"
 
+
+# In settings.py
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "asgiref.inmemory.ChannelLayer",
+        #"BACKEND": "asgi_redis.RedisChannelLayer",
+        "ROUTING": "atmosphere.routing.channel_routing",
+        "CONFIG": {},
+    },
+}
 # pyes secrets
 ELASTICSEARCH_HOST = SERVER_URL
 ELASTICSEARCH_PORT = 9200
