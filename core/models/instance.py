@@ -25,6 +25,7 @@ from core.models.size import convert_esh_size, Size
 from core.models.tag import Tag
 from core.query import only_current
 
+from atmosphere.consumers import ws_push_instance_update
 
 OPENSTACK_TASK_STATUS_MAP = {
     # Terminate tasks
@@ -582,6 +583,7 @@ class InstanceStatusHistory(models.Model):
                      new_history.status.name,
                      new_history.start_date))
                 new_history.save()
+                ws_push_instance_update(instance, new_history)
             return new_history
         except DatabaseError:
             logger.exception(
