@@ -3,7 +3,6 @@
   NOTE: These models should NEVER be created directly.
   See the respective sub-classes for complete implementation details.
 """
-import uuid
 from uuid import uuid4
 
 from django.db import models
@@ -38,6 +37,10 @@ class BaseRequest(models.Model):
     # Request Timeline
     start_date = models.DateTimeField(default=timezone.now)
     end_date = models.DateTimeField(null=True, blank=True)
+
+    def __unicode__(self):
+        return "%s: %s - %s" %\
+            (self.uuid, self.status, self.created_by)
 
     class Meta:
         abstract = True
@@ -170,6 +173,29 @@ class BaseHistory(models.Model):
     current_value = models.TextField()
     previous_value = models.TextField()
     timestamp = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        abstract = True
+
+
+class SingletonModel(models.Model):
+    """
+    A model that will ensure at-most-one row exists in the database
+    """
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super(SingletonModel, self).save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        pass
+
+    @classmethod
+    def get_instance(cls):
+        try:
+            return cls.objects.get(pk=1)
+        except cls.DoesNotExist:
+            return cls()
 
     class Meta:
         abstract = True

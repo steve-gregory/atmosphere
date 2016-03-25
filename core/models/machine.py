@@ -138,7 +138,7 @@ class ProviderMachine(BaseSource):
         identifier = self.instance_source.identifier
         provider = self.instance_source.provider
         return "%s (Provider:%s - App:%s Version:%s) " %\
-            (identifier, provider, self.application, self.application_version.name)
+            (identifier, provider, self.application, self.application_version)
 
     class Meta:
         db_table = "provider_machine"
@@ -216,7 +216,7 @@ def get_or_create_provider_machine(image_id, machine_name,
         app = create_application(provider_uuid, image_id, machine_name)
 
     if not version:
-        version = get_version_for_machine(provider_uuid, image_id)
+        version = get_version_for_machine(provider_uuid, image_id, fuzzy=True)
     if not version:
         version = create_app_version(app, "1.0", provider_machine_id=image_id)
 
