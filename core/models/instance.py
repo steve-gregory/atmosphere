@@ -7,7 +7,9 @@ from datetime import datetime, timedelta
 
 from django.db import models, transaction, DatabaseError
 from django.db.models import Q
+from django.db.models.signals import post_save
 from django.utils import timezone
+from channels import Group
 
 import pytz
 
@@ -24,8 +26,6 @@ from core.models.volume import convert_esh_volume
 from core.models.size import convert_esh_size, Size
 from core.models.tag import Tag
 from core.query import only_current
-
-from atmosphere.consumers import ws_push_instance_update
 
 OPENSTACK_TASK_STATUS_MAP = {
     # Terminate tasks
@@ -504,6 +504,21 @@ class Instance(models.Model):
     def esh_source(self):
         return self.source.identifier
 
+    @classmethod
+    def websocket_groups(cls, user):
+        """
+        At any given time, this is the list of *all* websocket groups
+        the current user is a part of
+        """
+        groups = []
+        # FIXME: Current impl sort-of falls over in a 'DELETE' event --
+        # What if the instance is terminated and we never send final messages?
+        # We should instead do a 'smarter queryset' in place of user.current_instances
+        for instance in user.current_instances:
+            group_name = "push-instance-%s" % instance.provider_alias
+            groups.append(Group(group_name))
+        return groups
+
     def json(self):
         return {
             'alias': self.provider_alias,
@@ -583,7 +598,6 @@ class InstanceStatusHistory(models.Model):
                      new_history.status.name,
                      new_history.start_date))
                 new_history.save()
-                ws_push_instance_update(instance, new_history)
             return new_history
         except DatabaseError:
             logger.exception(
@@ -949,3 +963,15 @@ def create_instance(
                      (name, provider_alias,))
     # NOTE: No instance_status_history here, because status is not passed
     return new_inst
+
+
+# Save Hook:
+def update_webhook(sender, instance, created, **kwargs):
+    """
+    Every time the ISH changes -- Tell any listening 3rd parties
+    """
+    from atmosphere.consumers import push_status_history_update
+    push_status_history_update(instance)
+
+# Instantiate the hooks:
+post_save.connect(update_webhook, sender=InstanceStatusHistory)
