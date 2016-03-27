@@ -966,12 +966,20 @@ def create_instance(
 
 
 # Save Hook:
-def update_webhook(sender, instance, created, **kwargs):
+def update_history_webhook(sender, instance, created, **kwargs):
     """
     Every time the ISH changes -- Tell any listening 3rd parties
     """
-    from atmosphere.consumers import push_status_history_update
+    from core.consumers import push_status_history_update
     push_status_history_update(instance)
 
+def update_instance_webhook(sender, instance, created, **kwargs):
+    """
+    Every time the ISH changes -- Tell any listening 3rd parties
+    """
+    from core.consumers import push_status_history_update
+    push_status_history_update(instance.get_last_history())
+
 # Instantiate the hooks:
-post_save.connect(update_webhook, sender=InstanceStatusHistory)
+post_save.connect(update_history_webhook, sender=InstanceStatusHistory)
+post_save.connect(update_instance_webhook, sender=Instance)

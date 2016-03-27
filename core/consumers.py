@@ -40,6 +40,11 @@ def ws_receive(message):
     Router for all websocket.receive
     """
     logger.info("WebSocket 'push_instances' receive message = %s", message.__dict__)
+    user = user_from_token(message)
+    if isinstance(user, AnonymousUser):
+        return
+    for instance in user.current_instances:
+        push_status_history_update(instance.get_last_history())
     return
 
 
@@ -106,6 +111,7 @@ def push_status_history_update(new_history):
     # via Instance.websocket_groups(user)
     # FIXME: Isolate to InstanceStatusHistory
     latest_status = new_history.status.name
+    new_status = latest_status
     if 'deploying' in latest_status:
         new_status = 'active - deploying'
     elif 'networking' in latest_status:
