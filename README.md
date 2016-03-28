@@ -12,6 +12,7 @@ Atmosphere addresses the growing needs for highly configurable and customized co
 ## Contributing
 
 ### Coding Style
+
 - Use 4 space indentation
 - Limit lines to 79 characters
 - Remove unused imports
