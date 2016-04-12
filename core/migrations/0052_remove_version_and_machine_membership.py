@@ -35,10 +35,6 @@ class Migration(migrations.Migration):
             model_name='instancemembership',
             name='owner',
         ),
-        migrations.AlterUniqueTogether(
-            name='providermachinemembership',
-            unique_together=set([]),
-        ),
         migrations.RemoveField(
             model_name='providermachinemembership',
             name='group',
