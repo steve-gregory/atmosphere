@@ -261,18 +261,6 @@ def add_membership(image_version, group):
             if created:
                 print "Created new ApplicationMembership: %s" \
                     % (obj,)
-            obj, created = models.ApplicationVersionMembership.objects.get_or_create(
-                group=group,
-                image_version=provider_machine.application_version)
-            if created:
-                print "Created new ApplicationVersionMembership: %s" \
-                    % (obj,)
-            obj, created = models.ProviderMachineMembership.objects.get_or_create(
-                group=group,
-                provider_machine=provider_machine)
-            if created:
-                print "Created new ProviderMachineMembership: %s" \
-                    % (obj,)
             # Share with the *cloud* last!
             accounts.image_manager.share_image(img, project_name)
             accounts.accept_shared_image(img, project_name)
@@ -312,16 +300,6 @@ def remove_membership(image_version, group):
                 application=provider_machine.application).delete()
             logger.info("Removed ApplicationMembership: %s-%s"
                         % (provider_machine.application, group))
-            models.ApplicationVersionMembership.objects.filter(
-                group=group,
-                application_version=provider_machine.application_version).delete()
-            logger.info("Removed ApplicationVersionMembership: %s-%s"
-                        % (provider_machine.application_version, group))
-            models.ProviderMachineMembership.objects.filter(
-                group=group,
-                provider_machine=provider_machine).delete()
-            logger.info("Removed ProviderMachineMembership: %s-%s"
-                        % (provider_machine, group))
             # Perform a *CLOUD* remove last.
             accounts.image_manager.unshare_image(img, project_name)
             logger.info("Removed Cloud Access: %s-%s"
@@ -418,10 +396,4 @@ def make_private(image_manager, image, provider_machine, tenant_list=[]):
             application=provider_machine.application)
         if created:
             print "Created new ApplicationMembership: %s" \
-                % (obj,)
-        obj, created = models.ProviderMachineMembership.objects.get_or_create(
-            group=group,
-            provider_machine=provider_machine)
-        if created:
-            print "Created new ProviderMachineMembership: %s" \
                 % (obj,)

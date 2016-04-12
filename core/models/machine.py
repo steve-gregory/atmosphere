@@ -97,11 +97,6 @@ class ProviderMachine(BaseSource):
     def icon_url(self):
         return self.application.icon.url if self.application.icon else None
 
-    def save(self, *args, **kwargs):
-        # Update values on the application
-        self.application.update(**kwargs)
-        super(ProviderMachine, self).save(*args, **kwargs)
-
     def creator_name(self):
         if self.application:
             return self.application.created_by.username
@@ -143,30 +138,6 @@ class ProviderMachine(BaseSource):
     class Meta:
         db_table = "provider_machine"
         app_label = "core"
-
-
-class ProviderMachineMembership(models.Model):
-
-    """
-    Members of a specific image and provider combination.
-    Members can view & launch respective machines.
-    If the can_share flag is set,
-    then members also have ownership--they can give
-    membership to other users.
-    The unique_together field ensures just one of those states is true.
-    """
-    provider_machine = models.ForeignKey(ProviderMachine)
-    group = models.ForeignKey('Group')
-    can_share = models.BooleanField(default=False)
-
-    def __unicode__(self):
-        return "(ProviderMachine:%s - Member:%s) " %\
-            (self.provider_machine.identifier, self.group.name)
-
-    class Meta:
-        db_table = 'provider_machine_membership'
-        app_label = 'core'
-        unique_together = ('provider_machine', 'group')
 
 
 def build_cached_machines():
@@ -230,66 +201,6 @@ def get_or_create_provider_machine(image_id, machine_name,
         version=version)
 
 
-def _extract_tenant_name(identity):
-    tenant_name = identity.get_credential('ex_tenant_name')
-    if not tenant_name:
-        tenant_name = identity.get_credential('ex_project_name')
-    if not tenant_name:
-        raise Exception("Cannot update application owner without knowing the"
-                        " tenant ID of the new owner. Please update your"
-                        " identity, or the credential key fields above"
-                        " this line.")
-    return tenant_name
-
-
-def update_application_owner(application, identity):
-    from service.openstack import glance_update_machine_metadata
-    from service.driver import get_account_driver
-    old_identity = application.created_by_identity
-    tenant_name = _extract_tenant_name(identity)
-    old_tenant_name = _extract_tenant_name(old_identity)
-    # Prepare the application
-    application.created_by_identity = identity
-    application.created_by = identity.created_by
-    application.save()
-    # Update all the PMs
-    all_pms = application.providermachine_set.all()
-    print "Updating %s machines.." % len(all_pms)
-    for provider_machine in all_pms:
-        accounts = get_account_driver(provider_machine.provider)
-        image_id = provider_machine.instance_source.identifier
-        image = accounts.get_image(image_id)
-        if not image:
-            continue
-        tenant_id = accounts.get_project(tenant_name).id
-        glance_update_machine_metadata(
-            provider_machine,
-            {'owner': tenant_id,
-             'application_owner': tenant_name})
-        print "App data saved for %s" % image_id
-        accounts.image_manager.share_image(image, tenant_name)
-        print "Shared access to %s with %s" % (image_id, tenant_name)
-        accounts.image_manager.unshare_image(image, old_tenant_name)
-        print "Removed access to %s for %s" % (image_id, old_tenant_name)
-
-
-def provider_machine_update_hook(new_machine, provider_uuid, identifier):
-    """
-    RULES:
-    #1. READ operations ONLY!
-    #2. FROM Cloud --> ProviderMachine ONLY!
-    """
-    from service.openstack import glance_update_machine
-    provider = Provider.objects.get(uuid=provider_uuid)
-    if provider.get_type_name().lower() == 'openstack':
-        glance_update_machine(new_machine)
-    else:
-        logger.warn(
-            "machine data for %s is likely incomplete."
-            " Create a new hook for %s." %
-            provider)
-
-
 def create_provider_machine(identifier, provider_uuid, app,
                             created_by_identity=None, version=None):
     # Attempt to match machine by provider alias
@@ -321,7 +232,6 @@ def create_provider_machine(identifier, provider_uuid, app,
         instance_source=source,
         application_version=version,
     )
-    provider_machine_update_hook(provider_machine, provider_uuid, identifier)
     logger.info("New ProviderMachine created: %s" % provider_machine)
     add_to_cache(provider_machine)
     return provider_machine
@@ -436,6 +346,7 @@ def convert_esh_machine(
     Takes as input an (rtwo) driver and machine, and a core provider id
     Returns as output a core ProviderMachine
     """
+    import ipdb;ipdb.set_trace()
     if identifier and not esh_machine:
         return _convert_from_instance(esh_driver, provider_uuid, identifier)
     elif not esh_machine:

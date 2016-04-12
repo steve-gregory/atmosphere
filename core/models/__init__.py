@@ -7,12 +7,11 @@ from core.models.allocation_strategy import Allocation, AllocationStrategy
 from core.models.application import Application, ApplicationMembership,\
     ApplicationScore, ApplicationBookmark, ApplicationThreshold
 from core.models.application_tag import ApplicationTag
-from core.models.application_version import ApplicationVersion, ApplicationVersionMembership
+from core.models.application_version import ApplicationVersion
 from core.models.cloud_admin import CloudAdministrator
 from core.models.credential import Credential, ProviderCredential
 from core.models.export_request import ExportRequest
-from core.models.group import Group, IdentityMembership,\
-    InstanceMembership, Leadership
+from core.models.group import Group, IdentityMembership, Leadership
 from core.models.identity import Identity
 from core.models.instance_tag import InstanceTag
 from core.models.link import ExternalLink
@@ -28,7 +27,7 @@ from core.models.provider import (
     ProviderConfiguration
 )
 from core.models.license import LicenseType, License, ApplicationVersionLicense
-from core.models.machine import ProviderMachine, ProviderMachineMembership
+from core.models.machine import ProviderMachine
 from core.models.machine_request import MachineRequest
 from core.models.match import PatternMatch, MatchType
 from core.models.maintenance import MaintenanceRecord

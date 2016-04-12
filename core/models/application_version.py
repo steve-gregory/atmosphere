@@ -57,10 +57,6 @@ class ApplicationVersion(models.Model):
         "BootScript",
         blank=True,
         related_name='application_versions')
-    membership = models.ManyToManyField('Group',
-                                        related_name='application_versions',
-                                        through='ApplicationVersionMembership',
-                                        blank=True)
 
     class Meta:
         db_table = 'application_version'
@@ -159,7 +155,7 @@ class ApplicationVersion(models.Model):
         return admin_list
 
     @classmethod
-    def current_machines(cls, request_user):
+    def current_versions(cls, request_user):
         # Showing non-end dated, public ApplicationVersions
         public_set = ApplicationVersion.objects.filter(
             only_current(),
@@ -205,31 +201,6 @@ class ApplicationVersion(models.Model):
     def is_owner(self, atmo_user):
         return (self.created_by == atmo_user |
                 self.application.created_by == atmo_user)
-
-
-class ApplicationVersionMembership(models.Model):
-    """
-    Members of a specific ApplicationVersion
-    Members can view & launch respective machines.
-    If the can_share flag is set, then members also have ownership--
-    they can give membership to other users.
-    The unique_together field ensures just one of those states is true.
-    NOTE: There IS underlying cloud implementation 9/10 times.
-    That should be 'hooked' in here!
-    """
-    image_version = models.ForeignKey(ApplicationVersion,
-                                      db_column='application_version_id')
-    group = models.ForeignKey('Group')
-    can_share = models.BooleanField(default=False)
-
-    def __unicode__(self):
-        return "(ApplicationVersion:%s - Member:%s) " %\
-            (self.image_version, self.group.name)
-
-    class Meta:
-        db_table = 'application_version_membership'
-        app_label = 'core'
-        unique_together = ('image_version', 'group')
 
 
 def get_version_for_machine(provider_uuid, identifier, fuzzy=False):
@@ -374,17 +345,3 @@ def transfer_licenses(parent_version, new_version):
     if parent_version.licenses.count():
         for license in parent_version.licenses.all():
             new_version.licenses.add(license)
-
-
-def transfer_membership(parent_version, new_version):
-    if parent_version.membership.count():
-        for member in parent_version.membership.all():
-            old_membership = ApplicationVersionMembership.objects.get(
-                group=member, image_version=parent_version)
-            membership, _ = ApplicationVersionMembership.objects.get_or_create(
-                image_version=new_version,
-                group=old_membership.group,
-                can_share=old_membership.can_share)
-
-
-

@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 import argparse
+import django; django.setup()
 import json
-import sys
-
 import os
-import django
-django.setup()
+import sys
+import subprocess
+
+import libcloud.security
+
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
-import libcloud.security
 
 
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -45,7 +46,7 @@ def has_fields(fields, required_fields):
     return True
 
 
-def read_provider_info(filename):
+def read_json_file(filename):
     data = None
 
     with open(filename) as fp:
@@ -63,6 +64,29 @@ def read_provider_info(filename):
         print("Invalid file format expected a json file.")
         sys.exit(1)
 
+    provider_info = info["provider"]
+    admin_info = info["admin"]
+    credential_info = info["credential"]
+
+    return provider_info, admin_info, credential_info
+
+
+def read_openrc_file(filename):
+    os_environ = {}
+    command = ['bash','-c', 'source %s' % filename]
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE)
+    for line in proc.stdout:
+        (key, _, value) = line.partition("=")
+        os_environ[key] = value
+
+    proc.communicate()
+
+    # Require the file to contain content
+    if not os_environ:
+        print("Please specify a non-empty openrc file.")
+        sys.exit(1)
+
+    import ipdb;ipdb.set_trace()
     provider_info = info["provider"]
     admin_info = info["admin"]
     credential_info = info["credential"]
@@ -244,13 +268,20 @@ def main():
 
     parser.add_argument("--from-json", dest="json",
                         help="Add a new provider for a json file.")
+    parser.add_argument("--from-openrc", dest="openrc",
+                        help="Add a new provider for a openrc file.")
+
 
     arguments = parser.parse_args()
 
     if arguments.json:
         (provider_info,
          admin_info,
-         provider_credentials) = read_provider_info(arguments.json)
+         provider_credentials) = read_json_file(arguments.json)
+    elif arguments.openrc:
+        (provider_info,
+         admin_info,
+         provider_credentials) = read_openrc_file(arguments.openrc)
     else:
         provider_info = get_provider_info()
         admin_info = get_admin_info()

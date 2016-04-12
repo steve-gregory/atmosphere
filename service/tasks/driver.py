@@ -1353,17 +1353,17 @@ def update_membership_for(provider_uuid):
             return
         else:
             pm = pm[0]
-        app_manager = pm.application_version.application.applicationmembership_set
+        app_manager = pm.application_version.application.membership
         if img.get('visibility','') is not 'public':
             # Lookup members
             image_members = acct_driver.image_manager.shared_images_for(
                 image_id=img.id)
             # add machine to each member
-            #(Who owns the cred:ex_project_name) in MachineMembership
+            #(Who owns the cred:ex_project_name) in ImageMembership
             # for member in image_members:
         else:
             members = app_manager.all()
-            # if MachineMembership exists, remove it (No longer private)
+            # if ImageMembership exists, remove it (No longer private)
             if members:
                 celery_logger.info("Application for PM:%s used to be private."
                             " %s Users membership has been revoked. "

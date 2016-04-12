@@ -4,18 +4,15 @@ Atmosphere utilizes the DjangoGroup model
 to manage users via the membership relationship
 """
 import uuid
-from math import floor, ceil
+from math import ceil
 
 from django.db import models
-from django.db.models.signals import post_save
 from django.utils import timezone
-from django.utils.timezone import datetime, timedelta
 from django.contrib.auth.models import Group as DjangoGroup
 
 from threepio import logger
 
 from core.models.allocation_strategy import Allocation
-from core.models.application import Application
 from core.models.identity import Identity
 from core.models.provider import Provider
 from core.models.quota import Quota
@@ -34,18 +31,6 @@ class Group(DjangoGroup):
     leaders = models.ManyToManyField('AtmosphereUser', through='Leadership')
     identities = models.ManyToManyField(Identity, through='IdentityMembership',
                                         blank=True)
-    instances = models.ManyToManyField('Instance',
-                                       through='InstanceMembership',
-                                       blank=True)
-    applications = models.ManyToManyField(Application,
-                                          related_name='members',
-                                          through='ApplicationMembership',
-                                          blank=True)
-    provider_machines = models.ManyToManyField(
-        'ProviderMachine',
-        related_name='members',
-        through='ProviderMachineMembership',
-        blank=True)
 
     def is_leader(self, test_user):
         return any(user for user in self.leaders.all() if user == test_user)
@@ -117,6 +102,7 @@ class Group(DjangoGroup):
 
 
 class Leadership(models.Model):
+    #Marked for future deletion
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     user = models.ForeignKey('AtmosphereUser')
     group = models.ForeignKey(Group)
@@ -174,7 +160,6 @@ class IdentityMembership(models.Model):
         delta = get_delta(self, time_period=settings.FIXED_WINDOW)
         allocation_result = _get_allocation_result(self.identity)
         over_allocation, diff_amount = allocation_result.total_difference()
-        burn_time = allocation_result.get_burn_rate()
         # Moving from seconds to hours
         hourly_credit = int(allocation_result
                             .total_credit().total_seconds() / 3600.0)
@@ -229,28 +214,3 @@ class IdentityMembership(models.Model):
         db_table = 'identity_membership'
         app_label = 'core'
         unique_together = ('identity', 'member')
-
-
-class InstanceMembership(models.Model):
-
-    """
-    InstanceMembership allows group to see Instances in the frontend/API calls.
-    InstanceMembership is the equivilant of
-    'sharing' your instance with another Group/User
-    Because InstanceMembers will not have that instance's Identity,
-    calls to terminate/request imaging/attach/detach *should* fail.
-    (This can also be dictated by permission)
-    """
-    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    instance = models.ForeignKey('Instance')
-    owner = models.ForeignKey(Group)
-
-    def __unicode__(self):
-        return "%s is a member-of %s" % (self.owner, self.instance)
-
-    class Meta:
-        db_table = 'instance_membership'
-        app_label = 'core'
-        unique_together = ('instance', 'owner')
-
-

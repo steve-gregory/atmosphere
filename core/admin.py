@@ -132,64 +132,6 @@ class ProviderMachineAdmin(admin.ModelAdmin):
             **kwargs)
 
 
-@admin.register(models.ApplicationVersionMembership)
-class ApplicationVersionMembershipAdmin(admin.ModelAdmin):
-    list_display = ["id", "_app_name", "_start_date", "_app_private", "group"]
-    list_filter = [
-        "image_version__application__name",
-        "group__name"
-    ]
-
-    def _start_date(self, obj):
-        return obj.application_version.start_date
-
-    def _app_private(self, obj):
-        return obj.application_version.application.private
-    _app_private.boolean = True
-
-    def _app_name(self, obj):
-        return obj.application_version
-
-    def render_change_form(self, request, context, *args, **kwargs):
-        context['adminform'].form.fields['application_version'].queryset = \
-                models.ApplicationVersion.objects.order_by('application__name')
-        context['adminform'].form.fields[
-            'group'].queryset = models.Group.objects.order_by('name')
-        return super(
-            ApplicationVersionMembershipAdmin,
-            self).render_change_form(
-            request,
-            context,
-            *args,
-            **kwargs)
-    pass
-
-
-@admin.register(models.ProviderMachineMembership)
-class ProviderMachineMembershipAdmin(admin.ModelAdmin):
-    list_display = ["id", "_pm_provider", "_pm_identifier", "_pm_name",
-                    "_pm_private", "group"]
-    list_filter = [
-        "provider_machine__instance_source__provider__location",
-        "provider_machine__instance_source__identifier",
-        "group__name"
-    ]
-
-    def _pm_provider(self, obj):
-        return obj.provider_machine.provider.location
-
-    def _pm_private(self, obj):
-        return obj.provider_machine.application_version.application.private
-    _pm_private.boolean = True
-
-    def _pm_identifier(self, obj):
-        return obj.provider_machine.identifier
-
-    def _pm_name(self, obj):
-        return obj.provider_machine.application_version.application.name
-    pass
-
-
 class ProviderCredentialInline(admin.TabularInline):
     model = models.ProviderCredential
     extra = 1

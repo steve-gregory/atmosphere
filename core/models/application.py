@@ -22,8 +22,9 @@ class Application(models.Model):
     """
     An application is a collection of providermachines, where each
     providermachine represents a single revision, together forming a linear
-    sequence of versions. The created_by field here is used for logging only;
-    do not rely on it for permissions; use ApplicationMembership instead.
+    sequence of versions.
+    Applications can be public (Available to all users) or private.
+    private images will respect values in ApplicationMembership.
     """
     uuid = models.UUIDField(default=uuid4, unique=True, editable=False)
     name = models.CharField(max_length=256)
@@ -316,16 +317,13 @@ class ApplicationMembership(models.Model):
 
     """
     Members of a private image can view & launch its respective machines. If
-    the can_modify flag is set, then members also have ownership--they can make
-    changes. The unique_together field ensures just one of those states is
     true.
     """
-    application = models.ForeignKey(Application)
-    group = models.ForeignKey('Group')
-    can_edit = models.BooleanField(default=False)
+    application = models.ForeignKey(Application, related_name='membership')
+    member = models.ForeignKey(Identity, related_name='shared_applications')
 
     def __unicode__(self):
-        return "%s %s %s" %\
+        return "Identity %s can view and launch Application %s" %\
             (self.group.name,
              "can edit" if self.can_edit else "can view",
              self.application.name)
@@ -333,7 +331,7 @@ class ApplicationMembership(models.Model):
     class Meta:
         db_table = 'application_membership'
         app_label = 'core'
-        unique_together = ('application', 'group')
+        unique_together = ('application', 'member')
 
 
 def _has_active_provider(app):
@@ -661,3 +659,61 @@ def _get_admin_owner(provider_uuid):
                 " for identities that do not yet exist in the DB."
                 % Provider.objects.get(uuid=provider_uuid))
     return None
+
+
+def _extract_tenant_name(identity):
+    tenant_name = identity.get_credential('ex_tenant_name')
+    if not tenant_name:
+        tenant_name = identity.get_credential('ex_project_name')
+    if not tenant_name:
+        raise Exception("Cannot update application owner without knowing the"
+                        " tenant ID of the new owner. Please update your"
+                        " identity, or the credential key fields above"
+                        " this line.")
+    return tenant_name
+
+
+def update_application_owner(application, identity):
+    from service.openstack import glance_update_machine_metadata
+    from service.driver import get_account_driver
+    old_identity = application.created_by_identity
+    tenant_name = _extract_tenant_name(identity)
+    old_tenant_name = _extract_tenant_name(old_identity)
+    # Prepare the application
+    application.created_by_identity = identity
+    application.created_by = identity.created_by
+    application.save()
+    # Update all the PMs
+    all_pms = application.providermachine_set.all()
+    print "Updating %s machines.." % len(all_pms)
+    for provider_machine in all_pms:
+        accounts = get_account_driver(provider_machine.provider)
+        image_id = provider_machine.instance_source.identifier
+        image = accounts.get_image(image_id)
+        if not image:
+            continue
+        tenant_id = accounts.get_project(tenant_name).id
+        glance_update_machine_metadata(
+            provider_machine,
+            {'owner': tenant_id,
+             'application_owner': tenant_name})
+        print "App data saved for %s" % image_id
+        accounts.image_manager.share_image(image, tenant_name)
+        print "Shared access to %s with %s" % (image_id, tenant_name)
+        accounts.image_manager.unshare_image(image, old_tenant_name)
+        print "Removed access to %s for %s" % (image_id, old_tenant_name)
+
+
+
+def transfer_membership(parent_version, new_version):
+    """
+    TODO, make this work for 'app' not 'version'
+    """
+    if parent_version.membership.count():
+        for member in parent_version.membership.all():
+            old_membership = ApplicationMembership.objects.get(
+                group=member, image_version=parent_version)
+            membership, _ = ApplicationMembership.objects.get_or_create(
+                image_version=new_version,
+                group=old_membership.group,
+                can_share=old_membership.can_share)

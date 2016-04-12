@@ -1,19 +1,19 @@
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
-from core.models import ApplicationVersionMembership as ImageVersionMembership
-from core.models import ApplicationVersion as ImageVersion
+from core.models import ApplicationMembership as ImageMembership
+from core.models import Application as Image
 from core.models import Group as Membership
 
 from api.v2.serializers.summaries import (
-    ImageVersionSummarySerializer, GroupSummarySerializer)
+    ImageSummarySerializer, GroupSummarySerializer)
 from api.v2.serializers.fields.base import ModelRelatedField
 
 
-class ImageVersionMembershipSerializer(serializers.HyperlinkedModelSerializer):
-    image_version = ModelRelatedField(
-        queryset=ImageVersion.objects.all(),
-        serializer_class=ImageVersionSummarySerializer,
+class ImageMembershipSerializer(serializers.HyperlinkedModelSerializer):
+    image = ModelRelatedField(
+        queryset=Image.objects.all(),
+        serializer_class=ImageSummarySerializer,
         style={'base_template': 'input.html'},
         required=False)
     #NOTE: When complete, return here to disambiguate between 'membership'&&'group'
@@ -24,20 +24,20 @@ class ImageVersionMembershipSerializer(serializers.HyperlinkedModelSerializer):
         lookup_field='uuid',
         required=False)
     url = serializers.HyperlinkedIdentityField(
-        view_name='api:v2:imageversion_membership-detail',
+        view_name='api:v2:imageimage_membership-detail',
     )
 
     class Meta:
-        model = ImageVersionMembership
+        model = ImageMembership
         validators = [
             UniqueTogetherValidator(
-                queryset=ImageVersionMembership.objects.all(),
-                fields=('image_version', 'group')
+                queryset=ImageMembership.objects.all(),
+                fields=('image', 'group')
             )
         ]
         fields = (
             'id',
             'url',
-            'image_version',
+            'image',
             'group'
         )

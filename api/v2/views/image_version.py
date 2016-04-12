@@ -30,4 +30,4 @@ class ImageVersionViewSet(AuthOptionalViewSet):
 
     def get_queryset(self):
         request_user = self.request.user
-        return ImageVersion.current_machines(request_user)
+        return ImageVersion.current_versions(request_user)
