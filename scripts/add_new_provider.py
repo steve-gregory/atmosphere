@@ -110,18 +110,18 @@ def get_provider_info():
             platform = XEN
             break
 
-    provider_type = openstack
     # 3.  Collect provider type
-    #print "Select a provider type for your new provider"
-    #print "1: Openstack, 2: Eucalyptus"
-    #while True:
-    #    provider_type = raw_input("Select a provider type (1/2): ")
-    #    if provider_type == '1':
-    #        provider_type = openstack
-    #        break
-    #    elif provider_type == '2':
-    #        provider_type = eucalyptus
-    #        break
+    # print "Select a provider type for your new provider"
+    # print "1: Openstack, 2: Eucalyptus"
+    # while True:
+    #     provider_type = raw_input("Select a provider type (1/2): ")
+    #     if provider_type == '1':
+    #         provider_type = openstack
+    #         break
+    #     elif provider_type == '2':
+    #         provider_type = eucalyptus
+    #         break
+    provider_type = openstack
 
     return {
         "name": name,
