@@ -228,12 +228,8 @@ def get_app_version(app, version, created_by=None, created_by_identity=None):
             application=app)
         return app_version
     except ApplicationVersion.DoesNotExist:
-        app_version = create_app_version(
-            app,
-            version,
-            created_by,
-            created_by_identity)
-        return app_version
+        return None
+
 
 def test_machine_in_version(app, version_name, new_machine_id):
     """
@@ -293,6 +289,20 @@ def merge_duplicated_app_versions(
             version.delete()
 
 
+def get_or_create_app_version(
+        app, version, created_by=None, created_by_identity=None,
+        change_log=None, allow_imaging=None, provider_machine_id=None):
+    app_version = get_app_version(
+        app, version,
+        created_by, created_by_identity)
+    if not app_version:
+        app_version = create_app_version(
+            app, version,
+            created_by, created_by_identity,
+            change_log, allow_imaging, provider_machine_id)
+    return app_version
+
+
 def create_app_version(
         app,
         version_str,
@@ -319,21 +329,21 @@ def create_app_version(
     last_version = app.latest_version
     if last_version:
         # DEFAULT: Use kwargs.. Otherwise: Inherit information from last
-        if change_log != None:
+        if change_log is not None:
             app_version.change_log = change_log
         else:
-            app_version.change_log=last_version.change_log
-        if allow_imaging != None:
+            app_version.change_log = last_version.change_log
+        if allow_imaging is not None:
             app_version.allow_imaging = allow_imaging
         else:
-            app_version.allow_imaging=last_version.allow_imaging
+            app_version.allow_imaging = last_version.allow_imaging
         app_version.save()
         transfer_licenses(last_version, app_version)
-        transfer_membership(last_version, app_version)
     else:
-        if change_log == None:
-            change_log = "New Application %s - Version %s" % (app.name, app_version.name)
-        if allow_imaging == None:
+        if change_log is None:
+            change_log = "New Application %s - Version %s" \
+                    % (app.name, app_version.name)
+        if allow_imaging is None:
             allow_imaging = True
         app_version.change_log = change_log
         app_version.allow_imaging = allow_imaging

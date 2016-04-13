@@ -176,9 +176,13 @@ def get_or_create_provider_machine(image_id, machine_name,
          * Create application based on PM uuid
     3. Using application from 2. Create provider machine
     """
+    version_name = "1.0"
     provider_machine = get_provider_machine(image_id, provider_uuid)
     if provider_machine:
         return provider_machine
+    # New schema: "My ApplicationName ver.1.0"
+    if 'ver.' in machine_name and not version:
+        machine_name, _, version_name = machine_name.rpartition('ver.')
     if not app:
         app = get_application(provider_uuid, image_id, machine_name)
     # ASSERT: If no application here, this is a new image (Found on instance)
@@ -189,7 +193,8 @@ def get_or_create_provider_machine(image_id, machine_name,
     if not version:
         version = get_version_for_machine(provider_uuid, image_id, fuzzy=True)
     if not version:
-        version = create_app_version(app, "1.0", provider_machine_id=image_id)
+        version = create_app_version(
+            app, version_name, provider_machine_id=image_id)
 
     if type(version) in [models.QuerySet, list]:
         version = version[0]
@@ -202,7 +207,7 @@ def get_or_create_provider_machine(image_id, machine_name,
 
 
 def create_provider_machine(identifier, provider_uuid, app,
-                            created_by_identity=None, version=None):
+                            version=None, created_by_identity=None):
     # Attempt to match machine by provider alias
     # Admin identity used until the real owner can be identified.
     provider = Provider.objects.get(uuid=provider_uuid)
@@ -346,7 +351,6 @@ def convert_esh_machine(
     Takes as input an (rtwo) driver and machine, and a core provider id
     Returns as output a core ProviderMachine
     """
-    import ipdb;ipdb.set_trace()
     if identifier and not esh_machine:
         return _convert_from_instance(esh_driver, provider_uuid, identifier)
     elif not esh_machine:

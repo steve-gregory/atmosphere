@@ -12,7 +12,7 @@ from core.query import (
 from core.models.size import Size, convert_esh_size
 from core.models.instance import convert_esh_instance
 from core.models.provider import Provider
-from core.models.machine import get_or_create_provider_machine, ProviderMachine
+from core.models.machine import ProviderMachine
 from core.models.application import Application, ApplicationMembership
 from core.models.application_version import ApplicationVersion
 from core.models import Allocation, Credential
@@ -24,6 +24,7 @@ from service.monitoring import (
 from service.monitoring import user_over_allocation_enforcement
 from service.driver import get_account_driver
 from service.cache import get_cached_driver
+from service.openstack import from_glance_image
 from glanceclient.exc import HTTPConflict, HTTPForbidden
 
 from threepio import celery_logger
@@ -222,7 +223,10 @@ def get_public_and_private_apps(provider):
         if any(cloud_machine.name.startswith(prefix) for prefix in ['eri-','eki-', 'ChromoSnapShot']):
             #celery_logger.debug("Skipping cloud machine %s" % cloud_machine)
             continue
-        db_machine = get_or_create_provider_machine(cloud_machine.id, cloud_machine.name, provider.uuid)
+        # FIXME: This method is *TERRIBLE*! Just stop using it.
+        # FIXME: We *have* a cloud_machine, this has super useful metadata. USE IT! create a method in service.openstack that will "build core objects" based on this image.
+        db_machine = from_glance_image(cloud_machine, provider)
+        #db_machine = get_or_create_provider_machine(cloud_machine.id, cloud_machine.name, provider.uuid)
         db_version = db_machine.application_version
         db_application = db_version.application
 

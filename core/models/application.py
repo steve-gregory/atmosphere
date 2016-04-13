@@ -704,6 +704,22 @@ def update_application_owner(application, identity):
         print "Removed access to %s for %s" % (image_id, old_tenant_name)
 
 
+def share_application(application, provider, tenant_names):
+    """
+    Given an application, and a provider+tenant_names pairing, add all matching Identities as members.
+    """
+    all_identities = Identity.objects.none()
+    for tenant_name in tenant_names:
+        all_identities |= Identity.objects.filter(
+            Q(credential__key='ex_project_name') & Q(credential__value='sgregory'),
+            provider__id=1)
+    for ident in all_identities:
+        ident.shared_applications.add(application)
+    return all_identities
+
+
+
+
 
 def transfer_membership(parent_version, new_version):
     """

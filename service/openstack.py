@@ -5,8 +5,134 @@ from django.utils.timezone import datetime, now
 
 from threepio import logger
 
-from core.models import Provider, Identity
+from core.models import Provider, Identity, AtmosphereUser, ProviderMachine
+from core.models.application import get_application, create_application, share_application
+from core.models.application_version import get_or_create_app_version
+from core.models.provider_machine import create_provider_machine
 from service.driver import get_account_driver
+
+
+def from_glance_image(glance_image, provider):
+    """
+    INPUT: glance_image, Core.Provider
+    OUTPUT: Core.ProviderMachine (+Version, +Application, +Membership..)
+    """
+    identifier = glance_image.get('id')
+    try:
+        pm = ProviderMachine.objects.get(
+            instance_source__provider=provider,
+            instance_source__identifier=identifier)
+        update_from_glance_image(pm, glance_image)
+    except ProviderMachine.DoesNotExist:
+        pm = create_from_glance_image(glance_image, provider)
+
+
+def update_from_glance_image(provider_machine, glance_image):
+    identifier = glance_image.get('id')
+    app_name = glance_image.get('application_name')
+    app_uuid = glance_image.get('application_uuid')
+    app_owner = glance_image.get('application_owner')
+    description = glance_image.get('application_description')
+    app_tags = glance_image.get('application_tags')
+    visibility = glance_image.get('visibility')
+    tenant_id = glance_image.get('owner')  # Newer versions of glance..
+    version = glance_image.get('application_version')
+    min_disk = glance_image.get('min_disk')
+    min_ram = glance_image.get('min_ram')
+    image_size = glance_image.get('size')  # Byte size
+    container = glance_image.get('container_format')
+    status = glance_image.get('status')
+    #FIXME: Start here.
+    pass
+
+def create_from_glance_image(glance_image, provider):
+    """
+    ROOT: Starting from here, create Core things based on an unknown glance image.
+    """
+    identifier = glance_image.get('id')
+    app_name = _make_unsafe(glance_image.get('application_name'))
+    app_uuid = glance_image.get('application_uuid')
+    version_name = glance_image.get('application_version')
+    app_owner = glance_image.get('application_owner')
+    change_log = _make_unsafe(glance_image.get('version_changelog'))
+    allow_imaging = glance_image.get('version_allow_imaging', 'true').lower() == 'true'
+    visibility = glance_image.get('visibility')
+    is_private = (visibility == 'private')
+    # Retrieve/Create core things:
+    (owner, identity) = _get_owner_from_metadata(provider, app_owner)
+    #1: Get or create an application
+    application = get_application(
+        provider.uuid, identifier, app_name, app_uuid)
+    if not application:
+        application = create_app_from_glance_image(glance_image, provider, owner, identity)
+    #2: Get or create an application version
+    version = get_or_create_app_version(
+        application, version_name, owner, identity,
+        change_log, allow_imaging, identifier)
+    #3: Get or create a provider machine
+    machine = create_provider_machine(identifier, provider.uuid, application, version, identity)
+    #4: Include membership on private images
+    if is_private:
+        member_names = get_membership_from_glance_image(glance_image, provider)
+        share_application(application, provider, member_names)
+    return machine
+
+
+def _get_owner_from_metadata(provider, app_owner):
+    try:
+        owner = AtmosphereUser.objects.get(username=app_owner)
+    except AtmosphereUser.DoesNotExist:
+        owner = None
+    identity = Identity.objects.filter(username=owner, provider=provider).first()
+    if not identity:
+        identity = Identity.objects.filter(
+            accountprovider__isnull=False,
+            provider=provider).first()
+        if identity and not owner:
+            owner = identity.created_by
+    return (owner, identity)
+
+
+def get_membership_from_glance_image(glance_image, provider):
+    """
+    Given a *PRIVATE* glance_image, return the list of members
+    NOTE: list contains tenant_ids. Conversion to tenant_names required.
+    """
+    accounts = get_account_driver(provider)
+    image_members_list = accounts.image_manager.glance.image_members.list(glance_image.id)
+    member_ids = [membership['member_id'] for membership in image_members_list]
+    members = []
+    for project_id in member_ids:
+        project = accounts.user_manager.get_project_by_id(project_id)
+        if not project:
+            print "Could not find project:%s" % project_id
+            continue
+        members.append(project.name)
+    return members
+
+
+
+def create_app_from_glance_image(glance_image, provider, created_by=None, created_by_identity=None):
+    """
+    This glance image has no ProviderMachine, so we start by creating the Application.
+    """
+    identifier = glance_image.get('id')
+    app_name = _make_unsafe(glance_image.get('application_name'))
+    app_uuid = glance_image.get('application_uuid')
+    description = _make_unsafe(glance_image.get('application_description'))
+    app_tags = glance_image.get('application_tags')
+    visibility = glance_image.get('visibility')
+    is_private = (visibility == 'private')
+    # Attempt to use the original tags
+    try:
+        tags = json.loads(app_tags)
+    except ValueError:
+        tags = None
+    application = create_application(
+        provider.uuid, identifier, app_name,
+        created_by_identity, created_by, description,
+        is_private, tags, app_uuid)
+    return application
 
 
 def glance_write_machine(provider_machine):
@@ -16,6 +142,7 @@ def glance_write_machine(provider_machine):
     update_method = ""
     base_source = provider_machine.instance_source
     provider = base_source.provider
+    version = provider_machine.application_version
     base_app = provider_machine.application
     identifier = base_source.identifier
     accounts = get_account_driver(provider)
@@ -34,13 +161,15 @@ def glance_write_machine(provider_machine):
             " Ask a programmer to fix this!")
     # Do any updating that makes sense... Name. Metadata..
     overrides = {
-        "application_version": str(provider_machine.application_version.name),
+        "application_version": str(version.name),
         "application_uuid": str(base_app.uuid),
         "application_name": _make_safe(base_app.name),
         "application_owner": base_app.created_by.username,
         "application_tags": json.dumps(
             [_make_safe(tag.name) for tag in base_app.tags.all()]),
-        "application_description": _make_safe(base_app.description)
+        "application_description": _make_safe(base_app.description),
+        "version_changelog": _make_safe(version.change_log),
+        "version_allow_imaging": str(version.allow_imaging)
     }
     if update_method == 'v2':
         extras = {
@@ -60,6 +189,8 @@ def glance_write_machine(provider_machine):
 def _make_safe(unsafe_str):
     return unsafe_str.replace("\r\n", "\n").replace("\n", "_LINE_BREAK_")
 
+def _reverse_safe(safe_str):
+    return safe_str.replace("_LINE_BREAK_","\n")
 
 def generate_openrc(driver, file_loc):
     project_domain = 'default'
@@ -91,6 +222,11 @@ export OS_IDENTITY_API_VERSION=%s
 
 
 def _make_unsafe(safe_str):
+    """
+    Take a 'safe str' and 'bring it back to normal'.
+    """
+    if safe_str is None:
+        return safe_str
     return safe_str.replace("_LINE_BREAK_", "\n")
 
 

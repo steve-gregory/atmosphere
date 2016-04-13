@@ -35,11 +35,17 @@ class Tag(models.Model):
 
 
 def updateTags(coreObject, tags, user=None):
+    """
+    Given a tagged coreObject
+    and a list of tags (str, or models.Tag)
+    update the coreObject to include *only* these tags.
+    """
     from core.models.instance import Instance
     from core.models.application import Application
     from core.models.machine_request import MachineRequest
     # Remove all tags from core*
     for tag in coreObject.tags.all():
+        #FIXME: I think this could be done without calling into specific instance-types. using `coreObject.tags.X` instead.
         if isinstance(coreObject, Instance):
             tag.instance_set.remove(coreObject)
         elif isinstance(coreObject, Application):
