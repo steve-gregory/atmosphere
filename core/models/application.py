@@ -248,7 +248,7 @@ class Application(models.Model):
         return self in user_bookmarks
 
     def get_members(self):
-        members = list(self.applicationmembership_set.all())
+        members = list(self.membership.all())
         for provider_machine in self._current_machines():
             members.extend(
                 provider_machine.providermachinemembership_set.all())
@@ -332,7 +332,6 @@ class ApplicationMembership(models.Model):
         db_table = 'application_membership'
         app_label = 'core'
         unique_together = ('application', 'member')
-
 
 def _has_active_provider(app):
     providermachine_set = app.all_machines
@@ -703,33 +702,35 @@ def update_application_owner(application, identity):
         accounts.image_manager.unshare_image(image, old_tenant_name)
         print "Removed access to %s for %s" % (image_id, old_tenant_name)
 
+def add_application_membership(application, identity, dry_run=False):
+    created = True
+    app_membership = None
+    if not dry_run:
+        app_membership, created = ApplicationMembership.objects.get_or_create(
+            application=application, member=identity)
+    if created:
+        logger.info("Added ApplicationMembership %s for %s" % (identity, application.name))
+    return app_membership
+
 
 def share_application(application, provider, tenant_names):
     """
-    Given an application, and a provider+tenant_names pairing, add all matching Identities as members.
+    Given an application, and a provider+tenant_names pairing,
+    add all matching Identities as members.
+
+    Returns (count_new_members, all_members)
     """
     all_identities = Identity.objects.none()
     for tenant_name in tenant_names:
         all_identities |= Identity.objects.filter(
             Q(credential__key='ex_project_name') & Q(credential__value='sgregory'),
             provider__id=1)
+    new_members = 0
     for ident in all_identities:
-        ident.shared_applications.add(application)
-    return all_identities
-
-
-
-
-
-def transfer_membership(parent_version, new_version):
-    """
-    TODO, make this work for 'app' not 'version'
-    """
-    if parent_version.membership.count():
-        for member in parent_version.membership.all():
-            old_membership = ApplicationMembership.objects.get(
-                group=member, image_version=parent_version)
-            membership, _ = ApplicationMembership.objects.get_or_create(
-                image_version=new_version,
-                group=old_membership.group,
-                can_share=old_membership.can_share)
+        membership, created = ApplicationMembership.objects.get_or_create(
+            application=application,
+            member=ident
+        )
+        new_members += 1 if created else 0
+    app_members = ApplicationMembership.objects.filter(application=application)
+    return (new_members, app_members)
