@@ -13,7 +13,7 @@ from core.models.size import Size, convert_esh_size
 from core.models.instance import convert_esh_instance
 from core.models.provider import Provider
 from core.models.machine import ProviderMachine
-from core.models.application import Application, ApplicationMembership
+from core.models.application import Application, ApplicationMembership, add_application_membership
 from core.models.application_version import ApplicationVersion
 from core.models import Allocation, Credential
 
@@ -174,28 +174,16 @@ def monitor_machines_for(provider_id, print_logs=False, dry_run=False):
         celery_logger.addHandler(consolehandler)
 
     #STEP 1: get the apps
-    new_public_apps, private_apps = get_public_and_private_apps(provider)
+    public_apps, private_apps = get_public_and_private_apps(provider)
 
-    #STEP 2: Find conflicts and report them.
-    intersection = set(private_apps.keys()) & set(new_public_apps)
-    if intersection:
-        celery_logger.error("These applications were listed as BOTH public && private apps. Manual conflict correction required: %s" % intersection)
-
-    #STEP 3: Apply the changes at app-level
-    #Memoization at this high of a level will help save time
+    #STEP 2: Apply the changes at app-level
     account_drivers = {} # Provider -> accountDriver
-    provider_tenant_mapping = {}  # Provider -> [{TenantId : TenantName},...]
+    provider_tenant_mapping = {}  # Provider -> {TenantId : TenantName,...}
     image_maps = {}
-    for app in new_public_apps:
-        if app in intersection:
-            celery_logger.error("Skipped public app: %s <%s>" % (app, app.id))
-            continue
+    for app in public_apps:
         make_machines_public(app, account_drivers, dry_run=dry_run)
 
     for app, membership in private_apps.items():
-        if app in intersection:
-            celery_logger.error("Skipped private app: %s <%s>" % (app, app.id))
-            continue
         make_machines_private(app, membership, account_drivers, provider_tenant_mapping, image_maps, dry_run=dry_run)
 
     if print_logs:
@@ -206,15 +194,14 @@ def get_public_and_private_apps(provider):
     """
     INPUT: Provider provider
     OUTPUT: 2-tuple (
-            new_public_apps [],
+            public_apps [],
             private_apps(key) + super-set-membership(value) {})
     """
     account_driver = get_account_driver(provider)
     all_projects_map = tenant_id_to_name_map(account_driver)
     cloud_machines = account_driver.list_all_images()
 
-    db_machines = ProviderMachine.objects.filter(only_current_source(), instance_source__provider=provider)
-    new_public_apps = []
+    public_apps = []
     private_apps = {}
     # ASSERT: All non-end-dated machines in the DB can be found in the cloud
     # if you do not believe this is the case, you should call 'prune_machines_for'
@@ -223,25 +210,20 @@ def get_public_and_private_apps(provider):
         if any(cloud_machine.name.startswith(prefix) for prefix in ['eri-','eki-', 'ChromoSnapShot']):
             #celery_logger.debug("Skipping cloud machine %s" % cloud_machine)
             continue
-        # FIXME: This method is *TERRIBLE*! Just stop using it.
-        # FIXME: We *have* a cloud_machine, this has super useful metadata. USE IT! create a method in service.openstack that will "build core objects" based on this image.
-        db_machine = from_glance_image(cloud_machine, provider)
-        #db_machine = get_or_create_provider_machine(cloud_machine.id, cloud_machine.name, provider.uuid)
+        #fixme: this is 'openstack specific'. We can abstract this in the future.
+        db_machine = from_glance_image(cloud_machine, provider, all_projects_map)
         db_version = db_machine.application_version
         db_application = db_version.application
-
-        if cloud_machine.get('visibility') == 'public':
-            if db_application.private and db_application not in new_public_apps:
-                new_public_apps.append(db_application) #Distinct list..
-            #Else the db app is public and no changes are necessary.
+        if db_application.private:
+            identity_list = get_shared_identities(account_driver, cloud_machine, all_projects_map)
+            if private_apps.get(db_application):
+                private_apps[db_application] |= identity_list
+            else:
+                private_apps[db_application] = identity_list
         else:
-            # cloud machine is private
-            membership = get_shared_identities(account_driver, cloud_machine, all_projects_map)
-            all_members = private_apps.get(db_application, [])
-            all_members.extend(membership)
-            #Distinct list..
-            private_apps[db_application] = all_members
-    return new_public_apps, private_apps
+            public_apps.append(db_application)
+
+    return public_apps, private_apps
 
 
 def remove_machine(db_machine, now_time=None, dry_run=False):
@@ -355,23 +337,11 @@ def get_current_members(account_driver, machine, tenant_id_name_map):
             current_tenants.append(tenant_name)
     return current_tenants
 
-def add_application_membership(application, identity, dry_run=False):
-    for membership_obj in identity.identity_memberships.all():
-        # For every 'member' of this identity:
-        group = membership_obj.member
-        # Add an application membership if not already there
-        if application.applicationmembership_set.filter(group=group).count() == 0:
-            celery_logger.info("Added ApplicationMembership %s for %s" % (group.name, application.name))
-            if not dry_run:
-                ApplicationMembership.objects.create(application=application, group=group)
-        else:
-            #celery_logger.debug("SKIPPED _ Group %s already ApplicationMember for %s" % (group.name, application.name))
-            pass
-
 def get_shared_identities(account_driver, cloud_machine, tenant_id_name_map):
     """
     INPUT: Provider, Cloud Machine (private), mapping of tenant_id to tenant_name
     OUTPUT: List of identities that *include* the 'tenant name' credential matched to 'a shared user' in openstack.
+    FIXME: You can do better.
     """
     from core.models import Identity
     cloud_membership = account_driver.image_manager.shared_images_for(
@@ -425,19 +395,15 @@ def make_machines_public(application, account_drivers={}, dry_run=False):
     """
     for version in application.active_versions():
         for machine in version.active_machines():
-            provider = machine.instance_source.provider
             account_driver = memoized_driver(machine, account_drivers)
             image = account_driver.image_manager.get_image(image_id=machine.identifier)
-            image_is_public = image.is_public if hasattr(image,'is_public') else image.get('visibility','') is 'public'
-            if image and image_is_public == False:
-                celery_logger.info("Making Machine %s public" % image.id)
+            if not image:
+                continue
+            image_is_public = image.is_public if hasattr(image,'is_public') else image.get('visibility','') == 'public'
+            if not image_is_public:
+                celery_logger.info("Making Private Machine %s public" % image.id)
                 if not dry_run:
                     account_driver.image_manager.glance.images.update(image.id, visibility='public')
-    # Set top-level application to public (This will make all versions and PMs public too!)
-    application.private = False
-    celery_logger.info("Making Application %s public" % application.name)
-    if not dry_run:
-        application.save()
 
 
 @task(name="monitor_instances")
@@ -673,6 +639,7 @@ def _perform_end_date(queryset, end_dated_at):
 
 def _share_image(account_driver, cloud_machine, identity, members, dry_run=False):
     """
+#FIXME: The 'credential_set' logic can be fixed.
     INPUT: use account_driver to share cloud_machine with identity (if not in 'members' list)
     """
     # Skip tenant-names who are NOT in the DB, and tenants who are already included
@@ -683,10 +650,11 @@ def _share_image(account_driver, cloud_machine, identity, members, dry_run=False
     elif missing_tenant.count() > 1:
         raise Exception("Safety Check -- You should not be here")
     tenant_name = missing_tenant[0]
-    cloud_machine_is_public = cloud_machine.is_public if hasattr(cloud_machine,'is_public') else cloud_machine.get('visibility','') is 'public'
+    cloud_machine_is_public = cloud_machine.is_public if hasattr(cloud_machine,'is_public') else cloud_machine.get('visibility','') == 'public'
     if cloud_machine_is_public == True:
-        celery_logger.info("Making Machine %s private" % cloud_machine.id)
-        account_driver.image_manager.glance.images.update(cloud_machine.id, visibility='private')
+        celery_logger.info("Making Public Machine %s private" % cloud_machine.id)
+        if not dry_run:
+            account_driver.image_manager.glance.images.update(cloud_machine.id, visibility='private')
 
     celery_logger.info("Sharing image %s<%s>: %s with %s" % (cloud_machine.id, cloud_machine.name, identity.provider.location, tenant_name.value))
     if not dry_run:
