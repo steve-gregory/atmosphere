@@ -4,6 +4,16 @@ from __future__ import unicode_literals
 from django.db import migrations, models
 
 
+def migrate_membership(apps, schema):
+    ApplicationMembership = apps.get_model("core", "ApplicationMembership")
+    ApplicationMembershipNEW = apps.get_model("core", "ApplicationMembershipNEW")
+    for membership in ApplicationMembership.objects.all():
+        app = membership.application
+        group = membership.group
+        for identity in group.identities.all():
+            ApplicationMembershipNEW.objects.get_or_create(application=app, member=identity)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -11,6 +21,17 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.CreateModel(
+            name='ApplicationMembershipNEW',
+            fields=[
+                ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
+                ('application', models.ForeignKey(related_name='membership', to='core.Application')),
+                ('member', models.ForeignKey(related_name='shared_applications', to='core.Identity')),
+            ],
+            options={
+                'db_table': 'application_membership_new',
+            },
+        ),
         migrations.AlterUniqueTogether(
             name='applicationversionmembership',
             unique_together=set([]),
@@ -59,21 +80,6 @@ class Migration(migrations.Migration):
             model_name='group',
             name='provider_machines',
         ),
-        migrations.AddField(
-            model_name='applicationmembership',
-            name='member',
-            field=models.ForeignKey(related_name='shared_applications', default=1, to='core.Identity'),
-            preserve_default=False,
-        ),
-        migrations.AlterField(
-            model_name='applicationmembership',
-            name='application',
-            field=models.ForeignKey(related_name='membership', to='core.Application'),
-        ),
-        migrations.AlterUniqueTogether(
-            name='applicationmembership',
-            unique_together=set([('application', 'member')]),
-        ),
         migrations.DeleteModel(
             name='ApplicationVersionMembership',
         ),
@@ -83,12 +89,11 @@ class Migration(migrations.Migration):
         migrations.DeleteModel(
             name='ProviderMachineMembership',
         ),
-        migrations.RemoveField(
-            model_name='applicationmembership',
-            name='can_edit',
+        migrations.AlterUniqueTogether(
+            name='applicationmembershipnew',
+            unique_together=set([('application', 'member')]),
         ),
-        migrations.RemoveField(
-            model_name='applicationmembership',
-            name='group',
+        migrations.RunPython(
+            migrate_membership, None
         ),
     ]
