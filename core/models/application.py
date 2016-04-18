@@ -304,9 +304,11 @@ class Application(models.Model):
         return self
 
     def __unicode__(self):
-        return "%s by %s - %s" \
-            % (self.name, self.created_by,
-               self.start_date if not self.end_date else 'END-DATED')
+        return "%s: %s by %s - %s" \
+            % (self.id, self.name, self.created_by,
+                (self.start_date if not self.end_date
+                 else 'END-DATED:%s' % self.end_date)
+               )
 
     class Meta:
         db_table = 'application'
