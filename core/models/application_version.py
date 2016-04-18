@@ -137,6 +137,54 @@ class ApplicationVersion(models.Model):
                 'providers': provider_map
                 }
 
+    @staticmethod
+    def rename(version, new_name, archive=False, delete=False):
+        """"
+        `application, name` are `unique_together`
+        If we find a match, we must transfer the machines.
+        If no match is found, we can modify the existing version name.
+        """
+        version_exists = ApplicationVersion.objects.filter(
+            application=version.application,
+            name=new_name).first()
+        if version_exists:
+            logger.info("ApplicationVersion, name combination already exists -- Version must be migrated")
+            machines = ApplicationVersion.migrate(version, version_exists,
+                                       archive=archive, delete=delete)
+            logger.info("Machines migrated: %s from Version: %s->%s" % (len(machines), version.name, new_name))
+            return True
+        logger.info("version %s name update: %s->%s" % (version.id, version.name, new_name))
+        version.name = new_name
+        version.save()
+
+
+    @staticmethod
+    def migrate(old_version, new_version, archive=False, delete=False):
+        """
+        Transfers *all* machines from one version to another.
+        After transfer, old_version can safely be deleted.
+        """
+        if not old_version or not isinstance(old_version, ApplicationVersion):
+            logger.warn("old_version Expected Core.ApplicationVersion "
+                        "-- Received %s" % old_version)
+            return
+        if not new_version or not isinstance(new_version, ApplicationVersion):
+            logger.warn("new_version Expected Core.ApplicationVersion "
+                        "-- Received %s" % new_version)
+            return
+
+        machines = old_version.machines.all()
+        for provider_machine in machines:
+            provider_machine.application_version = new_version
+            provider_machine.save()
+        if archive:
+            old_version.end_date = timezone.now()
+            old_version.save()
+        if delete:
+            old_version.delete()
+        return machines
+
+
     @classmethod
     def get_admin_image_versions(cls, user):
         """

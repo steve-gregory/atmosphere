@@ -7,7 +7,7 @@ from threepio import logger
 
 from core.models import Provider, Identity, AtmosphereUser, ProviderMachine
 from core.models.application import get_application, create_application, share_application
-from core.models.application_version import get_or_create_app_version
+from core.models.application_version import ApplicationVersion, get_or_create_app_version
 from core.models.machine import create_provider_machine
 from service.driver import get_account_driver
 
@@ -22,7 +22,7 @@ def from_glance_image(glance_image, provider, tenant_id_to_names={}):
         pm = ProviderMachine.objects.get(
             instance_source__provider=provider,
             instance_source__identifier=identifier)
-        #update_from_glance_image(pm, glance_image)
+        update_from_glance_image(pm, glance_image)
     except ProviderMachine.DoesNotExist:
         pm = create_from_glance_image(glance_image, provider, tenant_id_to_names)
     return pm
@@ -41,14 +41,93 @@ def update_from_glance_image(provider_machine, glance_image):
     app_tags = glance_image.get('application_tags')
     visibility = glance_image.get('visibility')
     tenant_id = glance_image.get('owner')  # Newer versions of glance..
-    version = glance_image.get('application_version')
+    version_name = glance_image.get('application_version')
     min_disk = glance_image.get('min_disk')
     min_ram = glance_image.get('min_ram')
     image_size = glance_image.get('size')  # Byte size
     container = glance_image.get('container_format')
     status = glance_image.get('status')
-    #FIXME: Start here
+    g_start_date = glance_timestamp(glance_image.get('created_at'))
+    g_end_date = glance_timestamp(glance_image.get('deleted'))
+    #NOTE: These are some 'simple repairs' that can be made to restore integrity when changes are made behind the scenes.
+    attempt_repair_application_description(provider_machine.application, description)
+    attempt_repair_version_name(provider_machine.application_version, version_name)
+    attempt_repair_start_date(provider_machine, g_start_date)
+    attempt_repair_end_date(provider_machine, g_end_date)
     pass
+
+
+def attempt_repair_end_date(provider_machine, new_end_date=None):
+    if not new_end_date:
+        return
+
+    instance_source = provider_machine.instance_source
+    if not instance_source.end_date:
+        instance_source.end_date = new_end_date
+        logger.warn("WARNING: ProviderMachine %s *DELETED* from the cloud.. End-dated in the database." % (provider_machine))
+        instance_source.save()
+
+
+def attempt_repair_start_date(provider_machine, new_start_date=None):
+    if not new_start_date:
+        return
+
+    instance_source = provider_machine.instance_source
+    if instance_source.start_date > new_start_date:
+        instance_source.start_date = new_start_date
+        logger.info("InstanceSource %s start_date update: %s->%s" % (instance_source.id, instance_source.start_date, new_start_date))
+        instance_source.save()
+
+    application_version = provider_machine.application_version
+    if application_version.start_date > new_start_date:
+        application_version.start_date = new_start_date
+        logger.info("ApplicationVersion %s start_date update: %s->%s" % (application_version.id, application_version.start_date, new_start_date))
+        application_version.save()
+
+    application = provider_machine.application
+    if application.start_date > new_start_date:
+        logger.info("Application %s start_date update: %s->%s" % (application.id, application.start_date, new_start_date))
+        application.start_date = new_start_date
+        application.save()
+    return True
+
+def attempt_repair_version_name(version, new_name=None):
+    """
+    """
+    if not version or not isinstance(version, ApplicationVersion):
+        logger.warn("Expected Core.ApplicationVersion -- Received %s" % version)
+        return
+    if not new_name:
+        return
+    if not version.name.startswith('1.0'):
+        # Version has likely already been updated. Keep the value to avoid problems
+        return
+    if new_name.startswith('1.0') and new_name.endswith('0'):
+        # Due to a 'bug' in the past with replicated providers, it is common to see: `1.0, 1.0.0, 1.0.0.0`
+        # None of these values can be trusted.
+        return
+    """
+    ASSERT: 'New' version name has relevant information,
+    and the 'old' name was the "Default" assigned on auto-assignment from the AccountProvider.
+    In this situation, we should use the new value.
+    """
+    ApplicationVersion.rename(version, new_name, archive=True)
+    return True
+
+
+def attempt_repair_application_description(application, new_description=None):
+    if not new_description:
+        return
+    if not application.description.startswith('Imported Application'):
+        return
+    if new_description.startswith('Imported Application'):
+        return
+    # ASSERT: 'New' description has relevant information, and the 'old' description was the "Default" assigned on auto-assignment from the AccountProvider.
+    # In this situation, we should use the values saved in metadata.
+    logger.info("Application %s description update: %s->%s" % (application.id, application.description, new_description))
+    application.description = new_description
+    application.save()
+    return True
 
 
 def create_from_glance_image(glance_image, provider, tenant_id_to_names={}):
@@ -315,7 +394,7 @@ def glance_update_machine(new_machine):
 
     logger.debug("Found glance image for %s" % new_machine)
 
-    if g_image.get('visibility','public') is not 'public':
+    if g_image.get('visibility','public') != 'public':
         new_app.private = True
 
     if new_app.first_machine() is new_machine:
