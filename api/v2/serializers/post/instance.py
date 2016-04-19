@@ -4,7 +4,6 @@ from core.models import (
     Size, Volume)
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
-from api.v2.serializers.fields.base import ReprSlugRelatedField
 
 class InstanceSerializer(serializers.ModelSerializer):
     """
