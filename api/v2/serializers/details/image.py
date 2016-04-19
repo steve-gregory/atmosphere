@@ -28,6 +28,10 @@ class ImageSerializer(serializers.HyperlinkedModelSerializer):
     url = UUIDHyperlinkedIdentityField(
         view_name='api:v2:application-detail',
     )
+    membership = serializers.SlugRelatedField(
+        slug_field='uuid',
+        read_only=True,
+        many=True)  # NEW
     class Meta:
         model = Image
         fields = (
@@ -38,6 +42,7 @@ class ImageSerializer(serializers.HyperlinkedModelSerializer):
             # Adtl. Fields
             'created_by',
             'description',
+            'membership',
             'end_date',
             'is_public',
             'icon',

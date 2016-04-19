@@ -36,10 +36,6 @@ class ImageVersionSerializer(serializers.HyperlinkedModelSerializer):
         queryset=BootScript.objects.all(),
         serializer_class=BootScriptSummarySerializer,
         style={'base_template': 'input.html'})
-    membership = serializers.SlugRelatedField(
-        slug_field='name',
-        read_only=True,
-        many=True)  # NEW
     user = UserSummarySerializer(source='created_by')
     identity = IdentitySummarySerializer(source='created_by_identity')
     machines = serializers.SerializerMethodField('get_machines_for_user')
@@ -78,7 +74,7 @@ class ImageVersionSerializer(serializers.HyperlinkedModelSerializer):
         model = ImageVersion
         fields = ('id', 'url', 'parent', 'name', 'change_log',
                   'image', 'machines', 'allow_imaging',
-                  'licenses', 'membership', 'min_mem', 'min_cpu', 'scripts',
+                  'licenses', 'min_mem', 'min_cpu', 'scripts',
                   'user', 'identity',
                   'start_date', 'end_date')
 

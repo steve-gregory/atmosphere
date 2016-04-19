@@ -18,10 +18,6 @@ class ProviderMachineSerializer(serializers.HyperlinkedModelSerializer):
     end_date = serializers.DateTimeField(source='instance_source.end_date',
                                          allow_null=True)
     licenses = LicenseSummarySerializer(many=True, read_only=True)  # NEW
-    members = serializers.SlugRelatedField(
-        slug_field='name',
-        read_only=True,
-        many=True)  # NEW
     # NOTE: this is still using ID instead of UUID -- due to abstract classes and use of getattr in L271 of rest_framework/relations.py, this is a 'kink' that has not been worked out yet.
     url = InstanceSourceHyperlinkedIdentityField(
         view_name='api:v2:providermachine-detail',
@@ -30,7 +26,7 @@ class ProviderMachineSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = ProviderMachine
         fields = ('id', 'uuid', 'url', 'provider', 'image',
-                  'licenses', 'members', 'version',
+                  'licenses', 'version',
                   'created_by', 'start_date', 'end_date')
 
     def update(self, instance, validated_data):
