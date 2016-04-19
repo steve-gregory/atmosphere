@@ -3,10 +3,10 @@ from rest_framework.validators import UniqueTogetherValidator
 
 from core.models import ApplicationMembership as ImageMembership
 from core.models import Application as Image
-from core.models import Group as Membership
+from core.models import Identity
 
 from api.v2.serializers.summaries import (
-    ImageSummarySerializer, GroupSummarySerializer)
+    ImageSummarySerializer, IdentitySummarySerializer)
 from api.v2.serializers.fields.base import ModelRelatedField
 
 
@@ -17,14 +17,14 @@ class ImageMembershipSerializer(serializers.HyperlinkedModelSerializer):
         style={'base_template': 'input.html'},
         required=False)
     #NOTE: When complete, return here to disambiguate between 'membership'&&'group'
-    group = ModelRelatedField(
-        queryset=Membership.objects.all(),
-        serializer_class=GroupSummarySerializer,
+    membership = ModelRelatedField(
+        queryset=Identity.objects.all(),
+        serializer_class=IdentitySummarySerializer,
         style={'base_template': 'input.html'},
         lookup_field='uuid',
         required=False)
     url = serializers.HyperlinkedIdentityField(
-        view_name='api:v2:imageimage_membership-detail',
+        view_name='api:v2:image_membership-detail',
     )
 
     class Meta:
@@ -32,12 +32,12 @@ class ImageMembershipSerializer(serializers.HyperlinkedModelSerializer):
         validators = [
             UniqueTogetherValidator(
                 queryset=ImageMembership.objects.all(),
-                fields=('image', 'group')
+                fields=('image', 'membership')
             )
         ]
         fields = (
             'id',
             'url',
             'image',
-            'group'
+            'membership'
         )
