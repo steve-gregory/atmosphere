@@ -83,6 +83,16 @@ class Instance(models.Model):
         qs = Instance.objects.filter(created_by_identity__in=identity_ids)
         return qs
 
+    def launch_success(self):
+        statuses = self.instancestatushistory_set.order_by('start_date')
+        last_status = statuses.last()
+
+        if last_status.status.name not in ["deploy_error", "networking"]:
+            return True
+        # if Instance is either in deploy_error or networking,
+        # return True if active ever exists
+        return statuses.filter(status__name="active").exists()
+
     def get_total_hours(self):
         from service.monitoring import _get_allocation_result
         identity = self.created_by_identity

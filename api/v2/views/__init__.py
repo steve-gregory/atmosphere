@@ -47,4 +47,5 @@ from .token import TokenViewSet
 from .user import UserViewSet
 from .volume import VolumeViewSet
 from .metric import MetricViewSet
+from .site_metric import SiteMetricViewSet
 from .ssh_key import SSHKeyViewSet

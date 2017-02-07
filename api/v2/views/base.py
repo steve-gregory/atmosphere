@@ -6,7 +6,7 @@ from rest_framework import exceptions, status
 from rest_framework.decorators import detail_route
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
+from rest_framework.viewsets import ViewSet, ModelViewSet, ReadOnlyModelViewSet
 
 from core import exceptions as core_exceptions
 from core.models import IdentityMembership, CloudAdministrator
@@ -47,6 +47,14 @@ def unresolved_requests_only(fn):
         else:
             return fn(self, request, *args, **kwargs)
     return wrapper
+
+
+class AuthAPIViewset(ViewSet):
+    http_method_names = ['get', 'put', 'patch', 'post',
+                         'delete', 'head', 'options', 'trace']
+    permission_classes = (InMaintenance,
+                          EnabledUserRequired,
+                          ApiAuthRequired,)
 
 
 class AuthViewSet(ModelViewSet):

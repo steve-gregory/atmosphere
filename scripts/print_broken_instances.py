@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import argparse
 import sys
 
@@ -29,7 +31,7 @@ def main():
     # Filter instances
     instances = []
     for inst in Instance.objects.filter(end_date=None):
-        statuses = inst.instancestatushistory_set
+        statuses = inst.instancestatushistory_set.order_by('start_date')
         last_status = statuses.last()
 
         # Instance is either in deploy_error or networking
