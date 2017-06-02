@@ -34,15 +34,23 @@ class IdentityViewSet(MultipleFieldLookup, AuthModelViewSet):
             export_data,
             status=status.HTTP_200_OK)
 
+    def queryset_by_username(self, username):
+        try:
+            group = Group.objects.get(name=username)
+        except Group.DoesNotExist:
+            return Identity.objects.none()
+        identities = group.current_identities.all()
+        return identities
 
     def get_queryset(self):
         """
         Filter identities by current user
         """
         user = self.request.user
-        try:
-            group = Group.objects.get(name=user.username)
-        except Group.DoesNotExist:
-            return Identity.objects.none()
-        identities = group.current_identities.all()
-        return identities
+        if user.is_admin():
+            if 'all_users' in self.request.GET:
+                return Identity.objects.all()
+            if 'username' in self.request.GET:
+                target_username = self.request.GET.get('username')
+                return self.queryset_by_username(target_username)
+        return self.queryset_by_username(user.username)
