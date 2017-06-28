@@ -5,6 +5,14 @@ from __future__ import unicode_literals
 from django.db import migrations
 from django.db.models import Q
 
+from core.hooks.quota import (listen_for_quota_assigned)
+
+def toggle_signals(event_model, on=True):
+    if on:
+        post_save.connect(listen_for_quota_assigned, sender=event_model)
+
+    else:
+        post_save.disconnect(listen_for_quota_assigned, sender=event_model)
 
 def _get_identity_uuid(resource_request):
     if resource_request.membership:
@@ -41,6 +49,9 @@ def write_quota_events(apps, schema_editor):
     EventTable = apps.get_model('core', 'EventTable')
     query = ~Q(status__name='pending')
     query &= ~Q(status__name='failed')
+    # switch off signals
+    toggle_signals(EventTable, on=False)
+
     for rrequest in ResourceRequest.objects.filter(query):
         entity_id = _get_identity_uuid(rrequest)
         new_payload = _get_payload(rrequest)
@@ -52,6 +63,9 @@ def write_quota_events(apps, schema_editor):
             name="quota_assigned",
             entity_id=entity_id,
             payload=new_payload)
+
+    # switch signals back on
+    toggle_signals(EventTable)
     return
 
 
