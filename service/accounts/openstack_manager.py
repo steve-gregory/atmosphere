@@ -8,6 +8,7 @@ from urlparse import urlparse
 
 from django.db.models import ObjectDoesNotExist
 from rtwo.exceptions import NovaOverLimit, KeystoneUnauthorized
+import glanceclient
 
 #FIXME: Add this exception to rtwo before merge.
 try:
@@ -493,8 +494,12 @@ class AccountDriver(BaseAccountDriver):
         return keypair
 
     def shared_images_for(self, image_id, status="approved"):
-        shared_with = self.image_manager.shared_images_for(
-            image_id=image_id)
+        try:
+            shared_with = self.image_manager.shared_images_for(
+                image_id=image_id)
+        except (glanceclient.exc.HTTPNotFound ,glanceclient.exc.HTTPForbidden) as exc:
+            logger.exception("Failed to lookup shared images for %s: %s", image_id, exc)
+            return []
 
         if getattr(settings, "REPLICATION_PROVIDER_LOCATION"):
             from core.models import Provider
