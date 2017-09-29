@@ -1,11 +1,11 @@
-from api.v2.serializers.details import InstanceSerializer, InstanceActionSerializer
+from api.v2.serializers.details import InstanceSerializer, InstanceActionSerializer, VolumeSerializer
 from api.v2.serializers.post import InstanceSerializer as POST_InstanceSerializer
 from api.v2.views.base import AuthModelViewSet
 from api.v2.views.mixins import MultipleFieldLookup
 from api.v2.views.instance_action import InstanceActionViewSet
 
 from core.exceptions import ProviderNotActive
-from core.models import Instance, Identity, UserAllocationSource, Project, AllocationSource
+from core.models import Instance, Identity, Volume, UserAllocationSource, Project, AllocationSource
 from core.models.boot_script import _save_scripts_to_instance
 from core.models.instance import find_instance
 from core.models.instance_action import InstanceAction
@@ -117,6 +117,7 @@ class InstanceViewSet(MultipleFieldLookup, AuthModelViewSet):
             action = action[0]
         try:
             result_obj = run_instance_action(user, identity, instance_id, action, action_params)
+            result_obj = _further_process_result(request, action, result_obj)
             api_response = {
                 'result': 'success',
                 'message': 'The requested action <%s> was run successfully' % (action,),
@@ -337,3 +338,18 @@ class InstanceViewSet(MultipleFieldLookup, AuthModelViewSet):
             return failure_response(status.HTTP_409_CONFLICT,
                                     str(exc.message))
 
+
+def _further_process_result(request, action, result):
+    """
+    Examples of result processing:
+    - Provide additional serialization if the `action` has a
+      `result` requiring processing.
+    - result must be JSON-serialiable
+      - AsyncResults are not and must be sanitized
+    """
+    if type(result) == AsyncResult:
+        result = str(result)
+    if 'volume' in action and type(result) == Volume:
+        result =  VolumeSerializer(result,
+                                context={"request": request}).data
+    return result

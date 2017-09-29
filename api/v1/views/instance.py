@@ -6,6 +6,7 @@ from rest_framework.response import Response
 
 from threepio import logger
 
+from celery.result import AsyncResult
 from core.exceptions import ProviderNotActive
 from core.models import AtmosphereUser as User
 from core.models.allocation_source import AllocationSource
@@ -379,10 +380,31 @@ class InstanceStatusHistoryDetail(AuthAPIView):
 
 def _further_process_result(request, action, result):
     """
-    Provide additional serialization if the `action` has a
-    `result` requiring processing.
+    Examples of result processing:
+    - Provide additional serialization if the `action` has a
+      `result` requiring processing.
+    - result must be JSON-serialiable
+      - AsyncResults are not and must be sanitized
     """
-    if 'volume' in action:
+    if type(result) == AsyncResult:
+        result = str(result)
+    if 'volume' in action and type(result) == Volume:
+        result =  VolumeSerializer(result,
+                                context={"request": request}).data
+    return result
+
+
+def _further_process_result(action, result):
+    """
+    Examples of result processing:
+    - Provide additional serialization if the `action` has a
+      `result` requiring processing.
+    - result must be JSON-serialiable
+      - AsyncResults are not and must be sanitized
+    """
+    if type(result) == AsyncResult:
+        result = str(result)
+    if 'volume' in action and type(result) == Volume:
         return VolumeSerializer(result,
                                 context={"request": request}).data
     else:
