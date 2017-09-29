@@ -341,7 +341,8 @@ def get_public_and_private_apps(provider):
     # if you do not believe this is the case, you should call 'prune_machines_for'
     for cloud_machine in cloud_machines:
         #Filter out: ChromoSnapShot, eri-, eki-, ... (Or dont..)
-        if any(cloud_machine.name.startswith(prefix) for prefix in ['eri-','eki-', 'ChromoSnapShot']):
+        image_name = cloud_machine.get('name', '')
+        if any(image_name.startswith(prefix) for prefix in ['eri-','eki-', 'ChromoSnapShot']):
             #celery_logger.debug("Skipping cloud machine %s" % cloud_machine)
             continue
         app_name, version_name = ProviderMachine._split_cloud_name(cloud_machine.name)
