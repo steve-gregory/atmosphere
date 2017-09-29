@@ -230,7 +230,8 @@ def machine_is_valid(cloud_machine, accounts):
     """
     provider = accounts.core_provider
     # If the name of the machine indicates that it is a Ramdisk, Kernel, or Chromogenic Snapshot, skip it.
-    if any(cloud_machine.name.startswith(prefix) for prefix in ['eri-','eki-', 'ChromoSnapShot']):
+    image_name = cloud_machine.get('name', '')
+    if any(image_name.startswith(prefix) for prefix in ['eri-','eki-', 'ChromoSnapShot']):
         celery_logger.info("Skipping cloud machine %s" % cloud_machine)
         return False
     # If the metadata 'skip_atmosphere' is found, do not add the machine.
